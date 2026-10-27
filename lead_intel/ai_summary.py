@@ -17,6 +17,7 @@ touching code.
 """
 
 import os
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -26,11 +27,15 @@ GEMINI_ENDPOINT = (
     "/{model}:generateContent"
 )
 
-# Current stable flash model at time of writing; override via GEMINI_MODEL.
+# The model the user's Gemini key is provisioned for (Google retired 2.5
+# models for new users). Override via GEMINI_MODEL if your key differs.
 DEFAULT_MODEL = "gemini-3.8-flash"
 
 # Google's documented env var names; GEMINI_API_KEY is the current standard.
 API_KEY_ENV_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+
+# Pause between retry attempts when the Gemini service is struggling.
+RETRY_PAUSE_SECONDS = 3
 
 
 class AiSummaryError(Exception):
@@ -81,25 +86,43 @@ def build_prompt(company, result) -> str:
     )
 
 
-def _perform_request(prompt: str, api_key: str, model: str, timeout: float) -> dict:
-    """Send the request to Gemini and return the raw JSON payload."""
-    try:
-        response = requests.post(
-            GEMINI_ENDPOINT.format(model=model),
-            params={"key": api_key},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.4,
-                    "maxOutputTokens": 300,
+def _perform_request(
+    prompt: str, api_key: str, model: str, timeout: float, attempts: int = 3
+) -> dict:
+    """Send the request to Gemini and return the raw JSON payload.
+
+    The API key is sent in the `x-goog-api-key` header: newer Google key
+    formats (e.g. starting with "AQ.") are not accepted as a `?key=` query
+    parameter, but the header works for all key types.
+
+    Retries up to `attempts` times with a short pause, because the Gemini
+    service can transiently time out or return 503 under load.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.post(
+                GEMINI_ENDPOINT.format(model=model),
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.4,
+                        # Flash models with thinking (e.g. gemini-3.8-flash)
+                        # spend part of this budget on hidden reasoning
+                        # before answering.
+                        "maxOutputTokens": 2048,
+                    },
                 },
-            },
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        return response.json()
-    except (requests.RequestException, ValueError) as error:
-        raise AiSummaryError(f"Gemini request failed: {error}") from error
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except (requests.RequestException, ValueError) as error:
+            if attempt == attempts:
+                raise AiSummaryError(
+                    f"Gemini request failed after {attempts} attempts: {error}"
+                ) from error
+            time.sleep(RETRY_PAUSE_SECONDS)
 
 
 def _extract_text(payload: dict) -> str:
@@ -124,7 +147,7 @@ def generate_summary(
     result,
     api_key: str,
     model: str | None = None,
-    timeout: float = 30.0,
+    timeout: float = 60.0,
 ) -> str:
     """Generate AI commentary for an already-computed assessment result.
 

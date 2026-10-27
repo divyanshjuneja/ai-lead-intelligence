@@ -97,8 +97,8 @@ class TestGenerateSummary:
         company, result = make_company_and_result()
         captured = {}
 
-        def fake_post(url, params=None, json=None, timeout=None):
-            captured.update(url=url, params=params, json=json, timeout=timeout)
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured.update(url=url, headers=headers, json=json, timeout=timeout)
 
             class Response:
                 def raise_for_status(self):
@@ -116,7 +116,7 @@ class TestGenerateSummary:
         monkeypatch.setattr(ai_summary.requests, "post", fake_post)
         summary = ai_summary.generate_summary(company, result, api_key="secret")
         assert summary == "summary text"
-        assert captured["params"] == {"key": "secret"}
+        assert captured["headers"]["x-goog-api-key"] == "secret"
         assert "Acme Corp" in captured["json"]["contents"][0]["parts"][0]["text"]
 
 

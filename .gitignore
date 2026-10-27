@@ -9,6 +9,7 @@
 # Environment variables and secrets
 .env
 .env.*
+!.env.example
 
 # Python cache and build artifacts
 __pycache__/
