@@ -67,12 +67,13 @@ lead_intel/
   models.py             Pydantic validation of company and ICP input
   scoring.py            Deterministic qualification engine (pure logic)
   storage.py            SQLite persistence (parameterized queries)
-tests/                  Unit tests for validation, scoring, and storage
+  export.py             CSV export built with pandas
+tests/                  Unit tests for validation, scoring, storage, export
 data/                   SQLite database lives here (not committed)
 ```
 
 ## Milestones
 
 - [x] M1: input validation, deterministic scoring, SQLite persistence, basic Streamlit UI
-- [ ] M2: history view, CSV export
+- [x] M2: history view, CSV export
 - [ ] M3: external AI integration (pending review)

@@ -108,9 +108,14 @@ def evaluate_size(company: CompanyInput, icp: IcpCriteria) -> CriterionResult:
 def evaluate_keywords(company: CompanyInput, icp: IcpCriteria) -> CriterionResult:
     """Rule 3: does the description mention any target keyword?
 
-    Without a description the rule is `unknown`, not failed — we simply do
-    not know whether the keywords appear.
+    Without a description or any configured keywords the rule is `unknown`,
+    not failed — we simply cannot evaluate it yet.
     """
+    if not icp.icp_keywords:
+        return CriterionResult(
+            "Relevant keywords", UNKNOWN, 0, WEIGHT_KEYWORDS,
+            "No target keywords were configured, so this rule cannot be evaluated.",
+        )
     if company.description is None:
         return CriterionResult(
             "Relevant keywords", UNKNOWN, 0, WEIGHT_KEYWORDS,
