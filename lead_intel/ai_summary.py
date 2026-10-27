@@ -35,7 +35,11 @@ DEFAULT_MODEL = "gemini-3.8-flash"
 API_KEY_ENV_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
 
 # Pause between retry attempts when the Gemini service is struggling.
-RETRY_PAUSE_SECONDS = 3
+RETRY_PAUSE_SECONDS = 5
+
+# How many total attempts per request (initial + retries). Brief load spikes
+# on Google's side usually clear within a few tries.
+DEFAULT_ATTEMPTS = 5
 
 
 class AiSummaryError(Exception):
@@ -87,7 +91,8 @@ def build_prompt(company, result) -> str:
 
 
 def _perform_request(
-    prompt: str, api_key: str, model: str, timeout: float, attempts: int = 3
+    prompt: str, api_key: str, model: str, timeout: float,
+    attempts: int = DEFAULT_ATTEMPTS,
 ) -> dict:
     """Send the request to Gemini and return the raw JSON payload.
 

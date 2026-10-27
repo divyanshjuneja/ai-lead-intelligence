@@ -77,7 +77,9 @@ class TestPerformRequest:
 
         monkeypatch.setattr(ai_summary.requests, "post", boom)
         with pytest.raises(ai_summary.AiSummaryError, match="request failed"):
-            ai_summary._perform_request("prompt", "key", "gemini-x", timeout=1)
+            ai_summary._perform_request(
+                "prompt", "key", "gemini-x", timeout=1, attempts=1
+            )
 
     def test_http_error_status_raises_ai_summary_error(self, monkeypatch):
         class FakeResponse:
@@ -89,7 +91,37 @@ class TestPerformRequest:
 
         monkeypatch.setattr(ai_summary.requests, "post", lambda *a, **k: FakeResponse())
         with pytest.raises(ai_summary.AiSummaryError, match="request failed"):
-            ai_summary._perform_request("prompt", "bad-key", "gemini-x", timeout=1)
+            ai_summary._perform_request(
+                "prompt", "bad-key", "gemini-x", timeout=1, attempts=1
+            )
+
+    def test_transient_failure_is_retried_and_recovers(self, monkeypatch):
+        """First call 503s, second succeeds -> the retry returns the payload."""
+        calls = {"count": 0}
+        sleeps = []
+
+        def flaky_post(*args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise requests.HTTPError("503 Service Unavailable")
+
+            class Response:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
+
+            return Response()
+
+        monkeypatch.setattr(ai_summary.requests, "post", flaky_post)
+        monkeypatch.setattr(ai_summary.time, "sleep", sleeps.append)
+        payload = ai_summary._perform_request(
+            "prompt", "key", "gemini-x", timeout=1, attempts=3
+        )
+        assert calls["count"] == 2
+        assert sleeps == [ai_summary.RETRY_PAUSE_SECONDS]
+        assert ai_summary._extract_text(payload) == "ok"
 
 
 class TestGenerateSummary:
