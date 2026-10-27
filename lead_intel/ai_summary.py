@@ -100,8 +100,10 @@ def _perform_request(
     formats (e.g. starting with "AQ.") are not accepted as a `?key=` query
     parameter, but the header works for all key types.
 
-    Retries up to `attempts` times with a short pause, because the Gemini
-    service can transiently time out or return 503 under load.
+    Retries up to `attempts` times with a short pause — but only for
+    transient errors (timeouts, connection failures, 5xx server errors).
+    Client errors like 429 (quota exhausted) or 401 (bad key) will not get
+    better by retrying, so they fail immediately.
     """
     for attempt in range(1, attempts + 1):
         try:
@@ -123,6 +125,14 @@ def _perform_request(
             response.raise_for_status()
             return response.json()
         except (requests.RequestException, ValueError) as error:
+            if isinstance(error, requests.HTTPError) and error.response is not None:
+                status = error.response.status_code
+                if status < 500:
+                    # 4xx: the request itself is the problem (bad key,
+                    # quota, bad model). Retrying will not help.
+                    raise AiSummaryError(
+                        f"Gemini request rejected (HTTP {status}): {error}"
+                    ) from error
             if attempt == attempts:
                 raise AiSummaryError(
                     f"Gemini request failed after {attempts} attempts: {error}"

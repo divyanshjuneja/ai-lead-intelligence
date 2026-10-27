@@ -95,6 +95,27 @@ class TestPerformRequest:
                 "prompt", "bad-key", "gemini-x", timeout=1, attempts=1
             )
 
+    def test_quota_429_fails_fast_without_retrying(self, monkeypatch):
+        """429 means 'quota exhausted' — retrying would only make it worse."""
+        calls = {"count": 0}
+
+        def rate_limited_post(*args, **kwargs):
+            calls["count"] += 1
+            response = requests.Response()
+            response.status_code = 429
+            raise requests.HTTPError("429 Too Many Requests", response=response)
+
+        monkeypatch.setattr(ai_summary.requests, "post", rate_limited_post)
+        monkeypatch.setattr(
+            ai_summary.time, "sleep",
+            lambda *a: pytest.fail("must not sleep/retry on 429"),
+        )
+        with pytest.raises(ai_summary.AiSummaryError, match="rejected"):
+            ai_summary._perform_request(
+                "prompt", "key", "gemini-x", timeout=1, attempts=5
+            )
+        assert calls["count"] == 1
+
     def test_transient_failure_is_retried_and_recovers(self, monkeypatch):
         """First call 503s, second succeeds -> the retry returns the payload."""
         calls = {"count": 0}
