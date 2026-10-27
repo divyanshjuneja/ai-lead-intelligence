@@ -7,7 +7,7 @@ logic lives elsewhere so it can be tested without a running interface.
 
 import streamlit as st
 
-from lead_intel import export, storage
+from lead_intel import ai_summary, export, storage
 from lead_intel.models import CompanyInput, IcpCriteria
 from lead_intel.scoring import AssessmentResult, assess_lead
 
@@ -45,6 +45,29 @@ def _render_history() -> None:
         file_name="lead_assessments.csv",
         mime="text/csv",
         type="primary",
+    )
+
+
+def _render_summary(company: CompanyInput, result) -> None:
+    """Optional AI commentary. Fails soft: any problem is a warning, never a crash."""
+    api_key = ai_summary.get_api_key()
+    if not api_key:
+        st.warning(
+            "AI commentary skipped: no GEMINI_API_KEY found. "
+            "Create one at aistudio.google.com/apikey and add it to .env "
+            "as GEMINI_API_KEY=...(.env is gitignored)."
+        )
+        return
+    try:
+        summary = ai_summary.generate_summary(company, result, api_key)
+    except ai_summary.AiSummaryError as error:
+        st.warning(f"AI commentary unavailable: {error}")
+        return
+    st.subheader("AI commentary")
+    st.write(summary)
+    st.caption(
+        "⚠️ AI-generated commentary. The score above is purely rule-based "
+        "and was not produced or altered by the AI."
     )
 
 
@@ -109,6 +132,12 @@ with company_tab:
             value="api, platform",
             help="Matches are case-insensitive substring searches in the description.",
         )
+        ai_commentary = st.checkbox(
+            "Also generate AI commentary (Gemini Flash)",
+            value=False,
+            help="Optional. The AI only comments on the rule-based result; "
+            "it never computes the score. Uses your GEMINI_API_KEY from .env.",
+        )
 
         submitted = st.form_submit_button("Evaluate", type="primary")
 
@@ -135,6 +164,8 @@ with company_tab:
                 st.error(f"Something went wrong while assessing or saving: {error}")
             else:
                 _render_result(result, assessment_id)
+                if ai_commentary:
+                    _render_summary(company, result)
 
 with history_tab:
     _render_history()

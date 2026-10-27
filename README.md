@@ -59,6 +59,27 @@ Then open http://localhost:8501 in your browser. Submissions are saved to
 .venv/bin/pytest -v
 ```
 
+## AI commentary (optional, Milestone 3)
+
+After the rule-based score, the app can optionally ask **Google Gemini Flash**
+for a 2–3 sentence interpretation of the result. Rules of the design:
+
+- The AI **never computes or changes the score** — the score is and stays
+  purely rule-based. The commentary is labeled as AI-generated in the UI.
+- The model only sees the facts you entered and the rule outcomes; its prompt
+  forbids inventing information.
+- Failures degrade gracefully: no key / no internet / API error → a warning,
+  the rest of the app works unchanged.
+
+Setup:
+
+1. Get a key from https://aistudio.google.com/apikey
+2. `cp .env.example .env` and paste your key as `GEMINI_API_KEY=...`
+3. Tick "Also generate AI commentary" in the app before evaluating
+
+`.env` is gitignored; the key lives only on your machine. All AI calls are
+mocked in tests — the test suite never touches the network.
+
 ## Project structure
 
 ```
@@ -67,8 +88,9 @@ lead_intel/
   models.py             Pydantic validation of company and ICP input
   scoring.py            Deterministic qualification engine (pure logic)
   storage.py            SQLite persistence (parameterized queries)
-  export.py             CSV export built with pandas
-tests/                  Unit tests for validation, scoring, storage, export
+  export.py            CSV export built with pandas
+  ai_summary.py        Optional Gemini AI commentary (separate from scoring)
+tests/                  Unit tests for validation, scoring, storage, export, AI
 data/                   SQLite database lives here (not committed)
 ```
 
@@ -76,4 +98,4 @@ data/                   SQLite database lives here (not committed)
 
 - [x] M1: input validation, deterministic scoring, SQLite persistence, basic Streamlit UI
 - [x] M2: history view, CSV export
-- [ ] M3: external AI integration (pending review)
+- [x] M3: external AI integration (Gemini Flash, commentary-only — score stays rule-based)
